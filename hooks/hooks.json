@@ -1,0 +1,17 @@
+{
+  "description": "AI Test Engine hooks — inject memory context on session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const fs=require('fs');const p='.test-memory/';if(!fs.existsSync(p)){process.exit(0)}const h=JSON.parse(fs.readFileSync(p+'test-history.json','utf8'));const s=JSON.parse(fs.readFileSync(p+'selectors.json','utf8'));const runs=h.runs||[];const last=runs[runs.length-1];const selCount=Object.keys(s.elements||{}).length;const stale=Object.values(s.elements||{}).filter(e=>e.confidence<0.7).length;console.log('AI Test Engine: '+selCount+' selectors ('+stale+' low-confidence) | '+(runs.length)+' runs | Last: '+(last?last.date:'never')+' | '+(last?(last.passed+'/'+last.total+' passed'):'no runs yet'))\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
