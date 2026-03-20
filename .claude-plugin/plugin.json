@@ -1,0 +1,14 @@
+{
+  "name": "ai-test-engine",
+  "description": "Intelligent self-healing E2E test system with persistent memory",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sparticle Inc",
+    "email": "rh.li@sparticle.com"
+  },
+  "repository": "https://github.com/sparticleinc/ai-test-engine-plugin",
+  "license": "MIT",
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "hooks": "./hooks/hooks.json"
+}
