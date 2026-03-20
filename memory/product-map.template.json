@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "lastUpdated": "",
+  "app": "",
+  "baseUrl": "",
+  "framework": {
+    "ui": "",
+    "router": "",
+    "i18n": "",
+    "state": ""
+  },
+  "pages": [],
+  "flows": []
+}
