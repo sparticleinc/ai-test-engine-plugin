@@ -1,11 +1,11 @@
 ---
 name: generate-tests
-description: Generate Playwright .spec.new.ts test files from product-map + patterns + selectors memory
+description: Generate Playwright .spec.new.ts test files with configurable depth (display/interaction/crud) from product-map + patterns + selectors memory
 ---
 
 # generate-tests Skill
 
-Generate Playwright E2E test files for pages that lack test coverage.
+Generate Playwright E2E test files for pages based on coverage depth.
 
 ## Prerequisites
 
@@ -20,65 +20,75 @@ Generate Playwright E2E test files for pages that lack test coverage.
   - `{page-id}` — specific page (e.g., `team`)
   - `{module}` — all pages in a module (e.g., `bot-*`)
 
+- `depth` — what level of tests to generate (default: `display`):
+  - `display` — L1 reachability tests (page loads, key elements visible)
+  - `interaction` — L1/L2 interaction tests (tab switching, search, sort, modals)
+  - `crud` — L2/L3 CRUD flow tests (create → verify → edit → delete)
+
+- `page` — generate for a specific page regardless of priority
+
 ## Execution Steps
 
 ### 1. Load Memory
 
-Read all three memory files:
-- `product-map.json` → page structure, components, i18n keys, keySelectors
+Read all memory files:
+- `product-map.json` → page structure, components, i18n keys, keySelectors, priority
 - `patterns.md` → test patterns to follow, anti-patterns to avoid
 - `selectors.json` → existing verified selectors (reuse where possible)
+- `references/test-levels.md` → component-to-test mapping
 
 ### 2. Select Target Pages
 
-Based on `target`, filter pages from product-map.json where `testCoverage` is `"none"` or `"partial"`.
+**If `--page` specified:** Use that page only, any depth applies.
 
-### 3. Determine Test Level per Page
+**If `--depth` specified without `--page`:**
+- `display` → all pages with `testCoverage: "none"`
+- `interaction` → P0 + P1 pages (filter by `priority` field)
+- `crud` → P0 pages only
 
-Apply the spec's level assignment rules:
+**Default (no flags):** Same as `display` for all uncovered pages.
 
-| Condition | Test Level | Description |
-|-----------|-----------|-------------|
-| Any page | @L1 | Reachability — page loads, key elements visible |
-| Page has forms | @L3 | Validation — form submit, error messages |
-| Page has CRUD | @L2 | Operations — create, read, update, delete |
-| Page has table/list | @L2 | Data display — table renders, sort, filter |
-| Multi-step workflow | @L4 | Workflow — end-to-end flow |
-| Edge cases | @L5 | Edge — boundary values, error states |
+### 3. Determine Tests per Page (Depth-Aware)
+
+#### Depth: `display` (default)
+
+For each page, generate:
+- 1 reachability test tagged `@L1`: page loads, URL correct, key elements visible
+
+#### Depth: `interaction`
+
+Inspect the page's `components` array in product-map.json. For each component type found, generate a test using the mapping in `references/test-levels.md`:
+
+| Component | Test |
+|-----------|------|
+| `Tabs` | Click each tab, verify content changes (`@L1`) |
+| `TextInput`/`SearchInput` | Type query, verify filtering (`@L2`) |
+| `Table` | Verify columns visible; test sort if applicable (`@L2`) |
+| `Select`/`Menu` | Open, select option, verify (`@L2`) |
+| `Pagination` | Navigate pages (`@L2`) |
+| `Modal` | Open/close modal (`@L1`) |
+| `Switch`/`Checkbox` | Toggle and verify (`@L2`) |
+
+Skip components that don't exist on the page. A page with `Tabs` + `Table` generates 2 interaction tests.
+
+#### Depth: `crud`
+
+1. Check if the page has a `flows` entry in product-map.json or has CRUD-capable components
+2. Read an existing CRUD test as template (e.g., `bot-crud.spec.ts`, `dictionary.spec.ts`)
+3. Generate a CRUD flow test:
+   - Create: fill form, submit, verify creation
+   - Read: verify item appears in list
+   - Update: edit a field, save, verify change
+   - Delete: delete item, confirm dialog, verify removal
+4. Include cleanup in `test.afterEach`
+5. Use `timestamp-test-data` pattern: `E2E_{Module}_${Date.now()}`
+6. Tag with `@L2` (CRUD) and `@L3` (validation)
 
 ### 4. Generate Test File
 
 For each target page, generate a `.spec.new.ts` file:
 
-**File naming**: `tests/{page-id}.spec.new.ts`
-
-**Template structure**:
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { login, navigateToBot } from './helpers/auth';
-
-test.describe('{PageTitle} @{tag}', () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page);
-    // Navigate to the page under test
-    {navigationCode}
-  });
-
-  // @L1 — Reachability test (always generated)
-  test('{pageTitle}ページ表示 @L1 @{priority}', async ({ page }) => {
-    // Verify page loaded
-    await expect(page).toHaveURL(/{urlPattern}/);
-
-    // Verify key elements are visible
-    {keyElementAssertions}
-  });
-
-  // @L2 — CRUD test (if page has CRUD)
-  // @L3 — Form validation test (if page has forms)
-  // etc.
-});
-```
+**File naming**: `tests/{page-id}.spec.new.ts` (for display depth) or `tests/{page-id}-interaction.spec.new.ts` / `tests/{page-id}-crud.spec.new.ts` (for deeper depths, if a display-level file already exists)
 
 **Selector strategy** (in priority order):
 1. Reuse verified selector from `selectors.json` (confidence ≥ 0.9)
@@ -89,7 +99,7 @@ test.describe('{PageTitle} @{tag}', () => {
    - `getByText({ exact: true })` for text elements
    - `evaluate()` for inaccessible elements (last resort)
 
-**Must follow these patterns from patterns.md:**
+**Must follow patterns from patterns.md:**
 - `search-before-click` — use search box before clicking list items
 - `networkidle-for-navigation` — `waitForLoadState('networkidle')` after page load
 - `timestamp-test-data` — `E2E_{Module}_${Date.now()}` for test data names
@@ -97,7 +107,7 @@ test.describe('{PageTitle} @{tag}', () => {
 - `placeholder-over-position` — use placeholder, not positional index
 - `no-space-in-japanese-particles` — no space before を、が、は
 
-**Must avoid these anti-patterns from patterns.md:**
+**Must avoid anti-patterns from patterns.md:**
 - `waitForTimeout-overuse` — use explicit waits instead
 - `catch-false-pattern` — use `expect().toBeVisible()` for required elements
 
@@ -105,31 +115,29 @@ test.describe('{PageTitle} @{tag}', () => {
 
 For each new selector used in generated tests:
 - Add to `selectors.json` with confidence 0.7 (unverified)
-- Set `lastVerified` to empty string (never verified)
+- Set `lastVerified` to empty string
 - Note `"source": "generated"` in metadata
 
-### 6. Determine Priority
+### 6. Update testCoverage in product-map.json
 
-Assign test priority based on page importance:
-- **@P0**: Core user journey pages (bot list, chat, settings, datasets)
-- **@P1**: Supporting features (team, account, API keys, dictionary)
-- **@P2**: Administrative/secondary features (admin console, org collaboration)
+After generating tests, update each page's `testCoverage`:
+- Only display tests → `"partial"`
+- Display + interaction → `"partial"`
+- Display + interaction + crud → `"full"`
 
 ### 7. Output
 
-Save generated files as `tests/{page-id}.spec.new.ts` (NOT `.spec.ts`).
+Save generated files as `tests/{page-id}[-depth].spec.new.ts`.
 
 Report:
 ```
-📝 Tests Generated
-==================
-✅ team.spec.new.ts — 3 tests (@L1 reachability, @L2 member list, @L3 invite form)
-✅ account.spec.new.ts — 2 tests (@L1 reachability, @L3 profile edit)
-✅ bot-tools.spec.new.ts — 2 tests (@L1 reachability, @L2 tool list)
+📝 Tests Generated (depth: interaction)
+========================================
+✅ bot-settings-interaction.spec.new.ts — 3 tests (tab switch @L1, search @L2, modal @L1)
+✅ dataset-list-interaction.spec.new.ts — 2 tests (search @L2, sort @L2)
 
-⚠️ Low-confidence selectors (need manual verification):
-  - team: getByRole('button', { name: '招待' }) — confidence 0.7
-  - account: getByPlaceholder('メールアドレス') — confidence 0.7
+⚠️ Low-confidence selectors (need verification):
+  - bot-settings: getByRole('tab', { name: '外部連携' }) — confidence 0.7
 
-Next: Run /test-run on generated tests to verify, then rename .spec.new.ts → .spec.ts
+Next: Run /test-run to verify, then rename .spec.new.ts → .spec.ts
 ```
