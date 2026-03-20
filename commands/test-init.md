@@ -18,6 +18,7 @@ Initialize the AI Test Engine memory for the current project.
    - Copy `patterns.template.md` → `.test-memory/patterns.md`
    - Copy `product-map.template.json` → `.test-memory/product-map.json`
    - Copy `test-history.template.json` → `.test-memory/test-history.json`
+   - Copy `heal-history.template.json` → `.test-memory/heal-history.json`
    - Create `.test-memory/changelog.md` with init entry
 
 3. Create `.test-config.json` by asking the user:

@@ -1,7 +1,7 @@
 {
   "name": "ai-test-engine",
   "description": "Intelligent self-healing E2E test system with persistent memory",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "Sparticle Inc",
     "email": "rh.li@sparticle.com"
